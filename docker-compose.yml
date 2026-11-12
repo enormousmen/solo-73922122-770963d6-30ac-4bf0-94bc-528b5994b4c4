@@ -1,0 +1,50 @@
+name: portal-logout-demo
+
+services:
+  idp:
+    build: ./idp
+    ports:
+      - "9000:9000"
+    environment:
+      IDP_PRIVATE_KEY_PATH: /keys/idp_private.pem
+      IDP_ISSUER: enterprise-idp
+      IDP_AUDIENCE: enterprise-portal
+      PORTAL_LOGOUT_URLS: >-
+        http://portal1:8000/backchannel-logout,
+        http://portal2:8000/backchannel-logout
+    volumes:
+      - ./deploy/keys:/keys:ro
+
+  portal1:
+    build: ./portal
+    ports:
+      - "8001:8000"
+    environment: &portal-env
+      IDP_PUBLIC_KEY_PATH: /keys/idp_public.pem
+      IDP_ISSUER: enterprise-idp
+      IDP_AUDIENCE: enterprise-portal
+      IDP_TOKEN_URL: http://idp:9000/token
+      PORTAL_DB_PATH: /data/portal.db
+    volumes:
+      - ./deploy/keys:/keys:ro
+      - portal-data:/data
+    depends_on:
+      - idp
+
+  portal2:
+    build: ./portal
+    ports:
+      - "8002:8000"
+    environment: *portal-env
+    volumes:
+      - ./deploy/keys:/keys:ro
+      - portal-data:/data
+    depends_on:
+      - idp
+
+volumes:
+  # Shared by both portal replicas: one SQLite file, so logout / login /
+  # session validation serialize across the two API processes, and state
+  # survives container restarts (docker compose down/up keeps it; use
+  # 'docker compose down -v' to wipe).
+  portal-data:
